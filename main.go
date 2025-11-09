@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"strings"
 	"strconv"
+	"strings"
 )
 
 type Bank struct {
@@ -14,165 +14,147 @@ type Bank struct {
 	BinTo   int
 }
 
+// loadBankData загружает данные банков из файла и возвращает слайс структур Bank
 func loadBankData(path string) ([]Bank, error) {
-	file, err := os.Open("banks.txt") // открываем файл
-	if err != nil { // err — ошибку, если файл не удалось открыть.
+	file, err := os.Open(path)
+	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
 
-	defer file.Close() // если мы открываем файл, то мы обязаны его в конце закрыть
-
-	scanner := bufio.NewScanner(file) // Создаём сканер, который будет читать файл построчно
-
+	scanner := bufio.NewScanner(file)
 	var banks []Bank
-	// Создаём пустой срез banks.
-	// Сюда мы будем добавлять банки, считанные из файла
 
-	for scanner.Scan() { // цикл, который читает все строки
-		line := scanner.Text() // текущая строка из файла пусть станет текстом
-		parts := strings.Split(line, ",") 
-		// парсим строку по запятым
-		// "Sberbank,400000,499999" → ["Sberbank", "400000", "499999"]
-		if len(parts) != 3 { // Проверяем, что строка действительно состоит из трёх частей
+	for scanner.Scan() {
+		parts := strings.Split(scanner.Text(), ",")
+		if len(parts) != 3 {
 			continue
 		}
 
-		BinFrom, err := strconv.Atoi(parts[1]) // переводим второй индекс парса из строки в число
-		if err != nil { // проверка ошибки
+		binFrom, err := strconv.Atoi(parts[1])
+		if err != nil {
 			return nil, err
 		}
 
-		BinTo, err := strconv.Atoi(parts[2]) // переводим третий индекс парса из строки в число
-		if err != nil { // проверка ошибки
+		binTo, err := strconv.Atoi(parts[2])
+		if err != nil {
 			return nil, err
 		}
 
-		bank := Bank{ // создаем структуру с нашими данными
+		banks = append(banks, Bank{
 			Name:    parts[0],
-			BinFrom: BinFrom,
-			BinTo:   BinTo,
-		}
-
-		banks = append(banks, bank) // Добавляем этот банк в наш список banks
+			BinFrom: binFrom,
+			BinTo:   binTo,
+		})
 	}
 
-	return banks, nil // возвращаем значение
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return banks, nil
 }
 
-
+// identifyBank возвращает имя банка по bin или "Неизвестный банк" если не найден
 func identifyBank(bin int, banks []Bank) string {
-	for _, bank := range banks { // Начинаем цикл по всем банкам в списке banks
-		if bin >= bank.BinFrom && bin <= bank.BinTo { // проверка диапазона BinFrom -> BinTo
-			return bank.Name // возвращаем имя банка, обращаемся к полю Name
+	for _, bank := range banks {
+		if bin >= bank.BinFrom && bin <= bank.BinTo {
+			return bank.Name
 		}
 	}
-
 	return "Неизвестный банк"
 }
 
+// extractBIN извлекает первые 6 цифр номера карты и возвращает их как число
 func extractBIN(cardNumber string) int {
-	if len(cardNumber) < 6 { // if меньше 6 цифр - ошибка
-		return 0
+	if len(cardNumber) < 6 {
+		return -1
 	}
 
-	sixNumber := cardNumber[:6] // срезаем первые 6 цифр
-	sixNumberAtoi, err := strconv.Atoi(sixNumber) // переводим их в числа
-	if err != nil { // проверка ошибки
-		return 0
+	bin, err := strconv.Atoi(cardNumber[:6])
+	if err != nil {
+		return -1
 	}
-	return sixNumberAtoi
+	return bin
 }
 
-
-// StringToDigit проверяет все ли руны в строке это числа
-// добавляет каждую цифру в массив и возвращает его
-func StringToDigit(s string) []int {
-	var digits []int // создаем пустой массив из чисел
-	for _, r := range s { // проходимся по всей строке
-		if r < '0' || r > '9' { // если руна в строке не число, возвращаем пустой массив
+// parseDigits проверяет, что строка состоит только из цифр и возвращает слайс int
+func parseDigits(s string) []int {
+	var digits []int
+	for _, r := range s {
+		if r < '0' || r > '9' {
 			return nil
 		}
-		digits = append(digits, int(r-'0')) // если все ок, добавляет в пустой массив значение
+		digits = append(digits, int(r-'0'))
 	}
 	return digits
 }
 
-
-// validateLuhn проходится по массиву цифр справа налево, удваивает каждое второе число
-// при необходимости вычитает 9 и проверяет итоговую сумму. sum % 10 == 0
+// validateLuhn проверяет номер карты по алгоритму Луна
 func validateLuhn(cardNumber string) bool {
-	arrayDigits := StringToDigit(cardNumber) // создание массива с помощью ф-и StringToDigit
-	if arrayDigits == nil { // проверка ошибки
+	digits := parseDigits(cardNumber)
+	if digits == nil {
 		return false
 	}
 
-	var sum int // сумма
-	double := false // флаг для умножения на 2
+	sum := 0
+	shouldDouble := false
 
-	for i := len(arrayDigits) - 1; i >= 0; i-- { // итерация по массиву с конца, с шагом 2
-		d := arrayDigits[i]
-		if double { // если флаг true, то умножаем на 2
+	for i := len(digits) - 1; i >= 0; i-- {
+		d := digits[i]
+		if shouldDouble {
 			d *= 2
-			if d > 9 { // если получившееся число > 9, вычитаем 9
+			if d > 9 {
 				d -= 9
 			}
 		}
-		sum += d // складываем все результаты
-		double = !double // обновляем флаг, чтобы он стал false
+		sum += d
+		shouldDouble = !shouldDouble
 	}
 
-	return sum % 10 == 0
+	return sum%10 == 0
 }
 
-
-
-// GetUserInput считывает и возвращает строку с терминала
+// getUserInput считывает строку с терминала и удаляет пробелы
 func getUserInput() string {
-    reader := bufio.NewReader(os.Stdin)
-    input, _ := reader.ReadString('\n')
-    return strings.TrimSpace(input)
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	return strings.TrimSpace(input)
 }
 
-
-// validateInput проверяет номер карты на корректность >=13 && <= 19
-func validateInput(cardNumber string) bool { 	
-	digits := StringToDigit(cardNumber)
-    if digits == nil {
-        return false
-    }
-    return len(digits) >= 13 && len(digits) <= 19
+// validateInput проверяет, что номер карты содержит только цифры и имеет длину 13 - 19
+func validateInput(cardNumber string) bool {
+	digits := parseDigits(cardNumber)
+	return len(digits) >= 13 && len(digits) <= 19
 }
-
-
 
 func main() {
 	fmt.Println("Добро пожаловать в программу валидации карт!")
-	banks, err := loadBankData("banks.txt") // загрузка всех банков из txt
-	if err != nil { // проверка ошибки
-		fmt.Println("Ошибка при загрузке данных банков: ", err)
+	banks, err := loadBankData("banks.txt")
+	if err != nil {
+		fmt.Println("Ошибка при загрузке данных банков:", err)
 		os.Exit(1)
 	}
 	fmt.Println("Данные банков успешно загружены!")
+	fmt.Println("Введите номер карты или exit для выхода:")
 
-	for { // бессконечный цикл с проверками
-		cardNumber := getUserInput() // ввод в терминале
+	for {
+		cardNumber := getUserInput()
 
-		if cardNumber == "exit" { // if ввели exit, программа завершена
+		if cardNumber == "exit" {
 			fmt.Println("Программа завершена")
 			break
 		}
-		if cardNumber == "" { // if ввели "", пустая строка
-			fmt.Println("Пустая строка")
+		if cardNumber == "" {
+			fmt.Println("Пустая строка, попробуйте снова")
 			continue
 		}
-
-		if !validateInput(cardNumber) { 
-			fmt.Println("Ошибка: номер карты должен содержать только цифры и иметь длину от 13 до 19 символов.")
+		if !validateInput(cardNumber) {
+			fmt.Println("Ошибка: номер карты должен содержать только цифры и иметь длину от 13 до 19")
 			continue
 		}
-
 		if !validateLuhn(cardNumber) {
-			fmt.Println("Невалидный номер карты!")
+			fmt.Println("Невалидный номер карты")
 			continue
 		}
 
